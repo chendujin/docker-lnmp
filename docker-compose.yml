@@ -1,0 +1,112 @@
+version: "3"
+services:
+  nginx:
+    container_name: lnmp_nginx
+    image: nginx:${NGINX_VERSION}
+    ports:
+      - ${HTTP_HOST}:80
+    volumes:
+      - ${SOURCE_DIR}:/var/www/html/:rw
+      - ${NGINX_CONFD_DIR}:/etc/nginx/conf.d/:rw
+      - ${NGINX_CONF_FILE}:/etc/nginx/nginx.conf:ro
+      - ${NGINX_LOG_DIR}:/var/log/nginx/:rw
+    restart: always
+
+  php:
+    container_name: lnmp_php
+    build:
+      context: php
+      args:
+        PHP_VERSION: ${PHP_VERSION}
+        PHP_SWOOLE: ${PHP_SWOOLE_VERSION}
+        PHP_REDIS: ${PHP_REDIS_VERSION}
+        LIB_RDKAFKA: ${LIB_RDKAFKA_VERSION}
+        PHP_RDKAFKA: ${PHP_RDKAFKA_VERSION}
+        LIB_RABBITMQ: ${LIB_RABBITMQ_VERSION}
+        PHP_AMQP: ${PHP_AMQP_VERSION}
+    volumes:
+      - ${SOURCE_DIR}:/var/www/html/:rw
+      - ${PHP_CONFIG_FILE}:/usr/local/etc/php/php.ini:ro
+      - ${PHP_FPM_CONFIG_FILE}:/usr/local/etc/php-fpm.d/www.conf:rw
+    cap_add:
+      - SYS_PTRACE
+    restart: always
+    networks:
+      - default
+
+  mysql:
+    container_name: lnmp_mysql
+    image: mysql:5.7
+    ports:
+      - ${MYSQL_HOST_PORT}:3306
+    volumes:
+      - ${MYSQL_DATA_DIR}:/var/lib/mysql:rw
+      - ${MYSQL_CONFIG_FILE}:/etc/mysql/my.cnf:ro
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_PASSWORD}"
+
+  jenkins:
+    container_name: lnmp_jenkins
+    ports:
+      - 8181:8080
+      - 50000:50000
+    image: jenkinsci/jenkins:lts
+    volumes:
+      - ${JENKINS_DATA_DIR}:/var/lib/jenkins_home:rw
+    restart: always
+
+  redis:
+    container_name: lnmp_redis
+    ports:
+      - 6375:6379
+    image: redis:latest
+    volumes:
+      - ${REDIS_DATA_DIR}:/var/lib/redis:rw
+    command: redis-server --appendonly yes
+    restart: always
+
+  rabbitmq:
+    container_name: lnmp_rabbitmq
+    image: rabbitmq:3.8-management
+    hostname: rabbit1
+    restart: always
+    ports:
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_MANAGER_PORT}:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS}
+    volumes:
+      - ${RABBITMQ_DATA_DIR}:/var/lib/rabbitmq:rw
+
+  beanstalkd:
+    container_name: lnmp_beanstalkd
+    ports:
+      - 11300:11300
+    image: schickling/beanstalkd
+    volumes:
+      - ${BEANSTALKD_DATA_DIR}:/var/lib/beanstald:rw
+    restart: always
+
+  beanstalkd-console:
+    container_name: lnmp_beanstalkd_console
+    ports:
+      - 2080:2080
+    image: schickling/beanstalkd-console
+    environment:
+      - BEANSTALKD_HOST=beanstalkd
+      - BEANSTALKD_PORT=11300
+    links:
+      - beanstalkd
+    restart: always
+
+  # 轻量级的Docker环境管理UI(访问9999端口)
+  portainer:
+    container_name: lnmp_portainer
+    image: portainer/portainer
+    ports:
+      - 8888:8000
+      - 9999:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PORTAINER_DATA_DIR}:/data
